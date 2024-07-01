@@ -31,6 +31,7 @@ import android.widget.LinearLayout;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
 import cc.ioctl.util.HookUtils;
+import cc.ioctl.util.HostInfo;
 import io.github.qauxv.base.annotation.FunctionHookEntry;
 import io.github.qauxv.base.annotation.UiItemAgentEntry;
 import io.github.qauxv.dsl.FunctionEntryRouter;
@@ -58,19 +59,24 @@ public class AddEssenceViewerToGroupSettingsHook extends CommonSwitchFunctionHoo
     @NonNull
     @Override
     public String getName() {
-        return "在群设置页添加精华消息入口";
+        return "群设置页添加精华消息入口";
     }
-  
+
     @NonNull
     @Override
     public String getDescription() {
-        return "本功能仅针对 TIM 用户\n如果打开后的列表为空，可能是由于 p_skey 不在内置浏览器的 Cookie 内，可以尝试打开群机器人页面，随意点击一个资料卡以解决（即使网页提示错误）\n不保证永久可用";
+        return "供 TIM 用户使用\n\n如果打开后的列表为空，可尝试打开群机器人页面，点击任一机器人资料卡以解决(想办法设置 Cookie p_skey 亦可)";
     }
 
     @NonNull
     @Override
     public String[] getUiItemLocation() {
         return FunctionEntryRouter.Locations.Auxiliary.GROUP_CATEGORY;
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return HostInfo.isTim();
     }
 
     // 根据 Lcom/tencent/mobileqq/activity/ChatSettingForTroop; 进行编写

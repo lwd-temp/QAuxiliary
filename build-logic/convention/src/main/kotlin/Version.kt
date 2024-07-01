@@ -10,7 +10,7 @@ object Version {
     val buildToolsVersion = findBuildToolsVersion()
     const val minSdk = 24
     const val targetSdk = 34
-    const val versionName = "1.5.0"
+    const val versionName = "1.5.1"
 
     private const val defaultNdkVersion = "25.2.9519653"
     private const val defaultCMakeVersion = "3.22.1"
@@ -33,7 +33,7 @@ object Version {
         return prop ?: env ?: defaultCMakeVersion
     }
 
-    private fun getLocalProperty(project: Project, propertyName: String): String? {
+    fun getLocalProperty(project: Project, propertyName: String): String? {
         val rootProject = project.rootProject
         val localProp = File(rootProject.projectDir, "local.properties")
         if (!localProp.exists()) {

@@ -25,6 +25,8 @@ package me.ketal.hook
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.method.LinkMovementMethod
@@ -97,6 +99,7 @@ object ChatItemShowQQUin : CommonConfigFunctionHook(), OnBubbleBuilder {
     private const val CFG_KEY_CUSTOM_MSG_FORMAT = "ChatItemShowQQUin.CFG_KEY_CUSTOM_MSG_FORMAT"
     private const val CFG_KEY_CUSTOM_TIME_FORMAT = "ChatItemShowQQUin.CFG_KEY_CUSTOM_TIME_FORMAT"
     private const val CFG_KEY_ENABLE_DETAIL_INFO = "ChatItemShowQQUin.CFG_KEY_ENABLE_DETAIL_INFO"
+    private const val CFG_KEY_ENABLE_GRAY_BG = "ChatItemShowQQUin.CFG_KEY_ENABLE_GRAY_BG"
     private const val DEFAULT_MSG_FORMAT = "\${shmsgseq}   \${formatTime}"
     private const val DEFAULT_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss"
 
@@ -148,11 +151,18 @@ object ChatItemShowQQUin : CommonConfigFunctionHook(), OnBubbleBuilder {
             ConfigManager.getDefaultConfig().putBoolean(CFG_KEY_ENABLE_DETAIL_INFO, value)
         }
 
+    private var mEnableGrayBg: Boolean
+        get() = ConfigManager.getDefaultConfig().getBooleanOrDefault(CFG_KEY_ENABLE_GRAY_BG, false)
+        set(value) {
+            ConfigManager.getDefaultConfig().putBoolean(CFG_KEY_ENABLE_GRAY_BG, value)
+        }
+
     @SuppressLint("SetTextI18n")
     private fun showConfigDialog(ctx: Context) {
         val timeFormat = mCurrentTimeFormat
         val msgFormat = mCurrentMsgFormat
         val enableDetailInfo = mEnableDetailInfo
+        val enableGrayBg = mEnableGrayBg
         val currEnabled = isEnabled
         val availablePlaceholders: Array<String> = arrayOf(
             "\${senderuin}", "\${frienduin}", "\${msgtype}", "\${readableMsgType}", "\${extraflag}", "\${extStr}",
@@ -168,6 +178,11 @@ object ChatItemShowQQUin : CommonConfigFunctionHook(), OnBubbleBuilder {
             isChecked = enableDetailInfo
             textSize = 16f
             text = "点击显示消息详细信息"
+        }
+        val grayBgSwitch = SwitchCompat(ctx).apply {
+            isChecked = enableGrayBg
+            textSize = 16f
+            text = "启用显示灰色圆角背景"
         }
         val tvMsgFmt: EditText = AppCompatEditText(ctx).apply {
             setText(msgFormat)
@@ -212,6 +227,7 @@ object ChatItemShowQQUin : CommonConfigFunctionHook(), OnBubbleBuilder {
             }
             addView(funcSwitch, lp)
             addView(detailInfoSwitch, lp)
+            addView(grayBgSwitch, lp)
             TextView(ctx).apply {
                 text = "消息格式"
                 textSize = 12f
@@ -241,6 +257,7 @@ object ChatItemShowQQUin : CommonConfigFunctionHook(), OnBubbleBuilder {
                     valueState.value = if (newEnabled) "已开启" else "禁用"
                 }
                 mEnableDetailInfo = detailInfoSwitch.isChecked
+                mEnableGrayBg = grayBgSwitch.isChecked
                 mCurrentMsgFormat = tvMsgFmt.text.toString()
                 mCurrentTimeFormat = tvTimeFmt.text.toString()
                 if (!isInitialized && isEnabled) {
@@ -343,10 +360,7 @@ object ChatItemShowQQUin : CommonConfigFunctionHook(), OnBubbleBuilder {
 
     private fun shouldShowTailMsgForMsgRecord(chatMessage: MsgRecord): Boolean {
         // do not show tail message for grey tips
-        if (chatMessage.msgType == MsgConstants.MSG_TYPE_GRAY_TIPS) {
-            return false
-        }
-        return true
+        return chatMessage.msgType != MsgConstants.MSG_TYPE_GRAY_TIPS
     }
 
     @SuppressLint("ResourceType", "SetTextI18n")
@@ -355,7 +369,7 @@ object ChatItemShowQQUin : CommonConfigFunctionHook(), OnBubbleBuilder {
         val isFlashPicTagNeedShow = FlashPicHook.INSTANCE.isInitializationSuccessful && isFlashPicNt(chatMessage)
         if (!isEnabled && !isFlashPicTagNeedShow) return
 
-        if (requireMinQQVersion(QQVersion.QQ_8_9_93_BETA_13315)) {
+        if (requireMinQQVersion(QQVersion.QQ_8_9_63)) {
             if (!rootView.children.map { it.id }.contains(ID_ADD_LAYOUT)) {
                 val layout = LinearLayout(rootView.context).apply {
                     layoutParams = ConstraintLayout.LayoutParams(
@@ -363,6 +377,18 @@ object ChatItemShowQQUin : CommonConfigFunctionHook(), OnBubbleBuilder {
                         ConstraintLayout.LayoutParams.WRAP_CONTENT
                     )
                     id = ID_ADD_LAYOUT
+                    if (mEnableGrayBg) {
+                        val drawable = GradientDrawable()
+                        drawable.shape = GradientDrawable.RECTANGLE
+                        drawable.setColor(Color.BLACK)
+                        drawable.cornerRadius = 10f
+                        drawable.alpha = 0x22
+                        background = drawable
+
+                        val _4 = XPopupUtils.dp2px(rootView.context, 4f)
+                        val _6 = XPopupUtils.dp2px(rootView.context, 6f)
+                        setPadding(_6, _4, _6, _4)
+                    }
                 }
 
                 val textView = TextView(rootView.context).apply {
@@ -372,6 +398,7 @@ object ChatItemShowQQUin : CommonConfigFunctionHook(), OnBubbleBuilder {
                         LinearLayout.LayoutParams.WRAP_CONTENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                     )
+                    if (mEnableGrayBg) setTextColor(Color.WHITE)
                     setOnClickListener {
                         if (!mEnableDetailInfo) return@setOnClickListener
                         val msgRecord = it.tag as MsgRecord
@@ -380,6 +407,7 @@ object ChatItemShowQQUin : CommonConfigFunctionHook(), OnBubbleBuilder {
                 }
                 layout.addView(textView)
                 rootView.addView(layout)
+
                 val constraintSet = constraintSetClz.newInstance(args())!!
                 constraintSet.invokeMethod("clone", args(rootView), argTypes(constraintLayoutClz))
                 val i_msg = rootView.children.indexOfFirst { it is LinearLayout && it.id != View.NO_ID }
@@ -396,25 +424,51 @@ object ChatItemShowQQUin : CommonConfigFunctionHook(), OnBubbleBuilder {
                         args(ID_ADD_LAYOUT, ConstraintSet.LEFT, id_name, ConstraintSet.LEFT),
                         argTypes(Int::class.java, Int::class.java, Int::class.java, Int::class.java)
                     )
+                    if (chatMessage.chatType == 1) {
+                        // 调整私聊显示边距
+                        constraintSet.invokeMethod(
+                            "setMargin",
+                            args(ID_ADD_LAYOUT, ConstraintSet.START, XPopupUtils.dp2px(rootView.context, 10f)),
+                            argTypes(Int::class.java, Int::class.java, Int::class.java)
+                        )
+                    } else if (chatMessage.chatType == 2 && chatMessage.msgType == MsgConstants.MSG_TYPE_FILE) {
+                        // 调整群聊文件边距
+                        constraintSet.invokeMethod(
+                            "setMargin",
+                            args(ID_ADD_LAYOUT, ConstraintSet.START, XPopupUtils.dp2px(rootView.context, 55f)),
+                            argTypes(Int::class.java, Int::class.java, Int::class.java)
+                        )
+                    }
                 } else {
                     constraintSet.invokeMethod(
                         "connect",
                         args(ID_ADD_LAYOUT, ConstraintSet.RIGHT, id_name, ConstraintSet.RIGHT),
                         argTypes(Int::class.java, Int::class.java, Int::class.java, Int::class.java)
                     )
+                    if (chatMessage.chatType == 1) {
+                        // 调整私聊显示边距
+                        constraintSet.invokeMethod(
+                            "setMargin",
+                            args(ID_ADD_LAYOUT, ConstraintSet.END, XPopupUtils.dp2px(rootView.context, 10f)),
+                            argTypes(Int::class.java, Int::class.java, Int::class.java)
+                        )
+                    }
                 }
                 constraintSet.invokeMethod("applyTo", args(rootView), argTypes(constraintLayoutClz))
             }
 
+            val layout = rootView.findViewById<LinearLayout>(ID_ADD_LAYOUT)
             val textView = rootView.findViewById<TextView>(ID_ADD_TEXTVIEW)
 
             if (isFlashPicTagNeedShow || shouldShowTailMsgForMsgRecord(chatMessage)) {
+                layout.visibility = View.VISIBLE
                 textView.visibility = View.VISIBLE
                 textView.let {
                     it.tag = chatMessage
                     it.text = (if (isFlashPicTagNeedShow) "闪照 " else "") + (if (isEnabled) formatTailMessageNt(chatMessage) else "")
                 }
             } else {
+                layout.visibility = View.GONE
                 textView.visibility = View.GONE
             }
 

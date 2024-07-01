@@ -46,19 +46,20 @@ import com.tencent.qqnt.kernel.nativeinterface.IKernelMsgService;
 import com.tencent.qqnt.kernel.nativeinterface.MsgElement;
 import com.tencent.qqnt.kernel.nativeinterface.MsgRecord;
 import com.tencent.qqnt.kernel.nativeinterface.PicElement;
+import com.xiaoniu.dispatcher.OnMenuBuilder;
 import com.xiaoniu.util.ContextUtils;
+import de.robv.android.xposed.XC_MethodHook;
 import io.github.qauxv.R;
 import io.github.qauxv.base.annotation.FunctionHookEntry;
 import io.github.qauxv.base.annotation.UiItemAgentEntry;
 import io.github.qauxv.bridge.AppRuntimeHelper;
+import io.github.qauxv.bridge.kernelcompat.KernelMsgServiceCompat;
 import io.github.qauxv.bridge.ntapi.MsgServiceHelper;
 import io.github.qauxv.dsl.FunctionEntryRouter;
 import io.github.qauxv.hook.CommonSwitchFunctionHook;
 import io.github.qauxv.ui.CommonContextWrapper;
 import io.github.qauxv.util.CustomMenu;
-import io.github.qauxv.util.Initiator;
 import io.github.qauxv.util.SyncUtils;
-import io.github.qauxv.util.Toasts;
 import io.github.qauxv.util.dexkit.AbstractQQCustomMenuItem;
 import io.github.qauxv.util.dexkit.ChatPanel_InitPanel_QQNT;
 import io.github.qauxv.util.dexkit.DexKit;
@@ -74,9 +75,11 @@ import org.json.JSONObject;
 
 @FunctionHookEntry
 @UiItemAgentEntry
-public class StickerPanelEntryHooker extends CommonSwitchFunctionHook implements SessionHooker.IAIOParamUpdate {
+public class StickerPanelEntryHooker extends CommonSwitchFunctionHook implements SessionHooker.IAIOParamUpdate, OnMenuBuilder {
+
     public static final StickerPanelEntryHooker INSTANCE = new StickerPanelEntryHooker();
     public static Object AIOParam;
+
     private StickerPanelEntryHooker() {
         super(new DexKitTarget[]{
                 ChatPanel_InitPanel_QQNT.INSTANCE,
@@ -84,6 +87,7 @@ public class StickerPanelEntryHooker extends CommonSwitchFunctionHook implements
                 Guild_Emo_Btn_Create_QQNT.INSTANCE
         });
     }
+
     public static String rkey_group;
     public static String rkey_private;
 
@@ -95,24 +99,24 @@ public class StickerPanelEntryHooker extends CommonSwitchFunctionHook implements
 
     @Override
     protected boolean initOnce() throws Exception {
-        HookUtils.hookAfterIfEnabled(this, DexKit.loadMethodFromCache(ChatPanel_InitPanel_QQNT.INSTANCE),param -> {
+        HookUtils.hookAfterIfEnabled(this, DexKit.loadMethodFromCache(ChatPanel_InitPanel_QQNT.INSTANCE), param -> {
             View v = null;
             Field[] fs = param.thisObject.getClass().getDeclaredFields();
-            for (Field f : fs){
-                if (f.getType().equals(ImageButton.class)){
+            for (Field f : fs) {
+                if (f.getType().equals(ImageButton.class)) {
                     f.setAccessible(true);
-                    if ("emo_btn".equals(MRes.getViewResName((View) f.get(param.thisObject)))){
+                    if ("emo_btn".equals(MRes.getViewResName((View) f.get(param.thisObject)))) {
                         v = (View) f.get(param.thisObject);
                     }
                 }
             }
-            if (v != null){
+            if (v != null) {
                 v.setOnLongClickListener(v1 -> {
                     ICreator.createPanel(v1.getContext());
                     return true;
                 });
-            }else {
-                XLog.e("Emo_Btn_Hooker","emo_btn field not found");
+            } else {
+                XLog.e("Emo_Btn_Hooker", "emo_btn field not found");
             }
         });
 
@@ -131,13 +135,13 @@ public class StickerPanelEntryHooker extends CommonSwitchFunctionHook implements
                         }
                     }
                 }
-         );
+        );
         HookUtils.hookAfterIfEnabled(
                 this,
                 XMethod.clz("com.tencent.qqnt.aio.shortcutbar.PanelIconLinearLayout").ret(ImageView.class).ignoreParam().get(),
                 param -> {
                     ImageView imageView = (ImageView) param.getResult();
-                    if ("表情".contentEquals(imageView.getContentDescription())){
+                    if ("表情".contentEquals(imageView.getContentDescription())) {
                         imageView.setOnLongClickListener(view -> {
                             ICreator.createPanel(view.getContext());
                             return true;
@@ -146,100 +150,6 @@ public class StickerPanelEntryHooker extends CommonSwitchFunctionHook implements
                 }
         );
 
-        //Hook for longClick msgItem
-        {
-            Class msgClass = Initiator.loadClass("com.tencent.mobileqq.aio.msg.AIOMsgItem");
-            String[] component = new String[]{
-                    "com.tencent.mobileqq.aio.msglist.holder.component.pic.AIOPicContentComponent",
-                    "com.tencent.mobileqq.aio.msglist.holder.component.mix.AIOMixContentComponent",
-            };
-
-
-            Method getMsg = null;
-            Method[] methods = Initiator.loadClass("com.tencent.mobileqq.aio.msglist.holder.component.BaseContentComponent").getDeclaredMethods();
-            for (Method method : methods) {
-                if (method.getReturnType() == msgClass && method.getParameterTypes().length == 0) {
-                    getMsg = method;
-                    getMsg.setAccessible(true);
-                    break;
-                }
-            }
-            for (String s : component) {
-                Class componentClazz = Initiator.loadClass(s);
-                Method listMethod = null;
-                methods = componentClazz.getDeclaredMethods();
-                for (Method method : methods) {
-                    if (method.getReturnType() == List.class && method.getParameterTypes().length == 0) {
-                        listMethod = method;
-                        listMethod.setAccessible(true);
-                        break;
-                    }
-                }
-                Method finalGetMsg = getMsg;
-                HookUtils.hookAfterIfEnabled(this, listMethod, param -> {
-                    Object msg = finalGetMsg.invoke(param.thisObject);
-                    Object item = CustomMenu.createItemNt(msg, "保存到面板", R.id.item_save_to_panel, () -> {
-                        try {
-                            long msgID = (long) Reflex.invokeVirtual(msg, "getMsgId");
-                            IKernelMsgService service = MsgServiceHelper.getKernelMsgService(AppRuntimeHelper.getAppRuntime());
-                            ArrayList<Long> msgIDs = new ArrayList<>();
-                            msgIDs.add(msgID);
-                            service.getMsgsByMsgId(SessionUtils.AIOParam2Contact(AIOParam), msgIDs, (result, errMsg, msgList) -> {
-                                SyncUtils.runOnUiThread(()->{
-                                    for (MsgRecord msgRecord : msgList) {
-                                        ArrayList<String> md5s = new ArrayList<>();
-                                        ArrayList<String> urls = new ArrayList<>();
-
-                                        for (MsgElement element : msgRecord.getElements()){
-                                            if (element.getPicElement() != null){
-                                                PicElement picElement = element.getPicElement();
-                                                //md5必须大写才能加载
-                                                md5s.add(picElement.getMd5HexStr().toUpperCase());
-                                                String originUrl = picElement.getOriginImageUrl();
-                                                if (TextUtils.isEmpty(originUrl)){
-                                                    urls.add("https://gchat.qpic.cn/gchatpic_new/0/0-0-" + picElement.getMd5HexStr().toUpperCase() + "/0");
-                                                }else {
-                                                    if (originUrl.startsWith("/download")){
-                                                        if (originUrl.contains("appid=1406")){
-                                                            urls.add("https://multimedia.nt.qq.com.cn" + originUrl + rkey_group);
-                                                        }else {
-                                                            urls.add("https://multimedia.nt.qq.com.cn" + originUrl + rkey_private);
-                                                        }
-                                                    }else {
-                                                        urls.add("https://gchat.qpic.cn"+picElement.getOriginImageUrl());
-                                                    }
-                                                }
-
-
-                                            }
-                                        }
-                                        if (!md5s.isEmpty()){
-                                            if (md5s.size() > 1){
-                                                PanelUtils.PreSaveMultiPicList(urls,md5s, CommonContextWrapper.createAppCompatContext(ContextUtils.getCurrentActivity()));
-                                            }else {
-                                                PanelUtils.PreSavePicToList(urls.get(0),md5s.get(0), CommonContextWrapper.createAppCompatContext(ContextUtils.getCurrentActivity()));
-                                            }
-                                        }
-                                    }
-                                });
-                            });
-
-                        } catch (Exception e) {
-                            XLog.e("StickerPanelEntryHooker.msgLongClickSaveToLocal", e);
-                        }
-                        return Unit.INSTANCE;
-                    });
-                    List list = (List) param.getResult();
-                    List result = new ArrayList<>();
-                    result.add(0,item);
-                    result.addAll(list);
-                    param.setResult(result);
-                });
-            }
-
-
-        }
-
         //Hook for change title
 
         Method sendMsgMethod = XMethod
@@ -247,18 +157,17 @@ public class StickerPanelEntryHooker extends CommonSwitchFunctionHook implements
                 .name("sendMsg")
                 .ignoreParam().get();
 
-
         HookUtils.hookBeforeIfEnabled(
                 this,
                 sendMsgMethod,
                 param -> {
-                    if (isEnabled()){
+                    if (isEnabled()) {
                         ArrayList<MsgElement> elements = (ArrayList<MsgElement>) param.args[2];
-                        if (FunConf.getBoolean("global", "sticker_panel_set_ch_change_title", false)){
+                        if (FunConf.getBoolean("global", "sticker_panel_set_ch_change_title", false)) {
                             String text = FunConf.getString("global", "sticker_panel_set_ed_change_title", "");
-                            if (!TextUtils.isEmpty(text)){
-                                for (MsgElement element : elements){
-                                    if (element.getPicElement() != null){
+                            if (!TextUtils.isEmpty(text)) {
+                                for (MsgElement element : elements) {
+                                    if (element.getPicElement() != null) {
                                         PicElement picElement = element.getPicElement();
                                         picElement.setSummary(text);
                                     }
@@ -269,14 +178,13 @@ public class StickerPanelEntryHooker extends CommonSwitchFunctionHook implements
                 }
         );
 
-
         //Hook for rkey
 
         HookUtils.hookBeforeIfEnabled(this, XMethod.clz("mqq.app.msghandle.MsgRespHandler").name("dispatchRespMsg").ignoreParam().get(), param -> {
             ToServiceMsg serviceMsg = XField.obj(param.args[1]).name("toServiceMsg").get();
             FromServiceMsg fromServiceMsg = XField.obj(param.args[1]).name("fromServiceMsg").get();
 
-            if ("OidbSvcTrpcTcp.0x9067_202".equals(fromServiceMsg.getServiceCmd())){
+            if ("OidbSvcTrpcTcp.0x9067_202".equals(fromServiceMsg.getServiceCmd())) {
                 FunProtoData data = new FunProtoData();
                 data.fromBytes(getUnpPackage(fromServiceMsg.getWupBuffer()));
 
@@ -296,16 +204,16 @@ public class StickerPanelEntryHooker extends CommonSwitchFunctionHook implements
         return true;
     }
 
-    private static byte[] getUnpPackage(byte[] b){
-        if (b == null){
+    private static byte[] getUnpPackage(byte[] b) {
+        if (b == null) {
             return null;
         }
-        if (b.length < 4){
+        if (b.length < 4) {
             return b;
         }
-        if (b[0] == 0){
+        if (b[0] == 0) {
             return Arrays.copyOfRange(b, 4, b.length);
-        }else {
+        } else {
             return b;
         }
     }
@@ -329,5 +237,79 @@ public class StickerPanelEntryHooker extends CommonSwitchFunctionHook implements
     @Override
     public void onAIOParamUpdate(Object AIOParam) {
         StickerPanelEntryHooker.AIOParam = AIOParam;
+    }
+
+    @NonNull
+    @Override
+    public String[] getTargetComponentTypes() {
+        return new String[]{
+                "com.tencent.mobileqq.aio.msglist.holder.component.pic.AIOPicContentComponent",
+                "com.tencent.mobileqq.aio.msglist.holder.component.mix.AIOMixContentComponent",
+        };
+    }
+
+    @Override
+    public void onGetMenuNt(@NonNull Object msg, @NonNull String componentType, @NonNull XC_MethodHook.MethodHookParam param) throws Exception {
+        if (!isEnabled()) {
+            return;
+        }
+        //Hook for longClick msgItem
+        Object item = CustomMenu.createItemIconNt(msg, "保存面板", R.drawable.ic_item_save_72dp, R.id.item_save_to_panel, () -> {
+            try {
+                long msgID = (long) Reflex.invokeVirtual(msg, "getMsgId");
+                KernelMsgServiceCompat service = MsgServiceHelper.getKernelMsgService(AppRuntimeHelper.getAppRuntime());
+                ArrayList<Long> msgIDs = new ArrayList<>();
+                msgIDs.add(msgID);
+                service.getMsgsByMsgId(SessionUtils.AIOParam2Contact(AIOParam), msgIDs, (result, errMsg, msgList) -> {
+                    SyncUtils.runOnUiThread(() -> {
+                        for (MsgRecord msgRecord : msgList) {
+                            ArrayList<String> md5s = new ArrayList<>();
+                            ArrayList<String> urls = new ArrayList<>();
+
+                            for (MsgElement element : msgRecord.getElements()) {
+                                if (element.getPicElement() != null) {
+                                    PicElement picElement = element.getPicElement();
+                                    //md5必须大写才能加载
+                                    md5s.add(picElement.getMd5HexStr().toUpperCase());
+                                    String originUrl = picElement.getOriginImageUrl();
+                                    if (TextUtils.isEmpty(originUrl)) {
+                                        urls.add("https://gchat.qpic.cn/gchatpic_new/0/0-0-" + picElement.getMd5HexStr().toUpperCase() + "/0");
+                                    } else {
+                                        if (originUrl.startsWith("/download")) {
+                                            if (originUrl.contains("appid=1406")) {
+                                                urls.add("https://multimedia.nt.qq.com.cn" + originUrl + rkey_group);
+                                            } else {
+                                                urls.add("https://multimedia.nt.qq.com.cn" + originUrl + rkey_private);
+                                            }
+                                        } else {
+                                            urls.add("https://gchat.qpic.cn" + picElement.getOriginImageUrl());
+                                        }
+                                    }
+
+
+                                }
+                            }
+                            if (!md5s.isEmpty()) {
+                                if (md5s.size() > 1) {
+                                    PanelUtils.PreSaveMultiPicList(urls, md5s, CommonContextWrapper.createAppCompatContext(ContextUtils.getCurrentActivity()));
+                                } else {
+                                    PanelUtils.PreSavePicToList(urls.get(0), md5s.get(0),
+                                            CommonContextWrapper.createAppCompatContext(ContextUtils.getCurrentActivity()));
+                                }
+                            }
+                        }
+                    });
+                });
+
+            } catch (Exception e) {
+                XLog.e("StickerPanelEntryHooker.msgLongClickSaveToLocal", e);
+            }
+            return Unit.INSTANCE;
+        });
+        List list = (List) param.getResult();
+        List result = new ArrayList<>();
+        result.add(0, item);
+        result.addAll(list);
+        param.setResult(result);
     }
 }

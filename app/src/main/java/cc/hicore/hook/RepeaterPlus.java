@@ -47,10 +47,9 @@ import cc.hicore.message.chat.SessionUtils;
 import cc.ioctl.util.HookUtils;
 import cc.ioctl.util.HostInfo;
 import cc.ioctl.util.Reflex;
-import com.tencent.qqnt.kernel.nativeinterface.Contact;
-import com.tencent.qqnt.kernel.nativeinterface.IKernelMsgService;
 import com.tencent.qqnt.kernel.nativeinterface.MsgAttributeInfo;
 import com.tencent.qqnt.kernel.nativeinterface.MsgRecord;
+import com.xiaoniu.dispatcher.OnMenuBuilder;
 import com.xiaoniu.util.ContextUtils;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -61,6 +60,8 @@ import io.github.qauxv.base.IUiItemAgent;
 import io.github.qauxv.base.annotation.FunctionHookEntry;
 import io.github.qauxv.base.annotation.UiItemAgentEntry;
 import io.github.qauxv.bridge.AppRuntimeHelper;
+import io.github.qauxv.bridge.kernelcompat.ContactCompat;
+import io.github.qauxv.bridge.kernelcompat.KernelMsgServiceCompat;
 import io.github.qauxv.bridge.ntapi.MsgConstants;
 import io.github.qauxv.bridge.ntapi.MsgServiceHelper;
 import io.github.qauxv.dsl.FunctionEntryRouter.Locations.Auxiliary;
@@ -89,7 +90,7 @@ import kotlinx.coroutines.flow.MutableStateFlow;
 
 @FunctionHookEntry
 @UiItemAgentEntry
-public class RepeaterPlus extends BaseFunctionHook implements SessionHooker.IAIOParamUpdate {
+public class RepeaterPlus extends BaseFunctionHook implements SessionHooker.IAIOParamUpdate, OnMenuBuilder {
 
     public static final RepeaterPlus INSTANCE = new RepeaterPlus();
 
@@ -229,63 +230,6 @@ public class RepeaterPlus extends BaseFunctionHook implements SessionHooker.IAIO
                     }
                 }
 
-            } else {
-                Class msgClass = Initiator.loadClass("com.tencent.mobileqq.aio.msg.AIOMsgItem");
-                String[] component = new String[]{
-                        "com.tencent.mobileqq.aio.msglist.holder.component.text.AIOTextContentComponent",
-                        "com.tencent.mobileqq.aio.msglist.holder.component.pic.AIOPicContentComponent",
-                        "com.tencent.mobileqq.aio.msglist.holder.component.reply.AIOReplyComponent",
-                        "com.tencent.mobileqq.aio.msglist.holder.component.anisticker.AIOAniStickerContentComponent",
-                        "com.tencent.mobileqq.aio.msglist.holder.component.video.AIOVideoContentComponent",
-                        "com.tencent.mobileqq.aio.msglist.holder.component.multifoward.AIOMultifowardContentComponent",
-                        "com.tencent.mobileqq.aio.msglist.holder.component.longmsg.AIOLongMsgContentComponent",
-                        "com.tencent.mobileqq.aio.msglist.holder.component.mix.AIOMixContentComponent",
-                        "com.tencent.mobileqq.aio.msglist.holder.component.ark.AIOArkContentComponent",
-                        "com.tencent.mobileqq.aio.msglist.holder.component.file.AIOFileContentComponent",
-                        "com.tencent.mobileqq.aio.msglist.holder.component.LocationShare.AIOLocationShareComponent"
-                };
-                Method getMsg = null;
-                Method[] methods = Initiator.loadClass("com.tencent.mobileqq.aio.msglist.holder.component.BaseContentComponent").getDeclaredMethods();
-                for (Method method : methods) {
-                    if (method.getReturnType() == msgClass && method.getParameterTypes().length == 0) {
-                        getMsg = method;
-                        getMsg.setAccessible(true);
-                        break;
-                    }
-                }
-                for (String s : component) {
-                    Class componentClazz = Initiator.loadClass(s);
-                    Method listMethod = null;
-                    methods = componentClazz.getDeclaredMethods();
-                    for (Method method : methods) {
-                        if (method.getReturnType() == List.class && method.getParameterTypes().length == 0) {
-                            listMethod = method;
-                            listMethod.setAccessible(true);
-                            break;
-                        }
-                    }
-                    Method finalGetMsg = getMsg;
-                    HookUtils.hookAfterIfEnabled(this, listMethod, param -> {
-                        if (ContextUtils.getCurrentActivity().getClass().getName().contains("MultiForwardActivity")) {
-                            return;
-                        }
-                        Object msg = finalGetMsg.invoke(param.thisObject);
-                        Object item = CustomMenu.createItemNt(msg, "+1", R.id.item_repeat, () -> {
-                            if (isMessageRepeatable(msg)) {
-                                repeatByForwardNt(msg);
-                            } else {
-                                Toasts.error(ContextUtils.getCurrentActivity(), "该消息不支持复读");
-                            }
-                            return Unit.INSTANCE;
-                        });
-                        List list = (List) param.getResult();
-                        List result = new ArrayList<>();
-                        result.add(0, item);
-                        result.addAll(list);
-                        param.setResult(result);
-                    });
-                }
-
             }
             return true;
         }
@@ -383,20 +327,20 @@ public class RepeaterPlus extends BaseFunctionHook implements SessionHooker.IAIO
 
     private void repeatByForwardNt(Object msg) {
         try {
-            Contact contact = SessionUtils.AIOParam2Contact(AIOParam);
+            ContactCompat contact = SessionUtils.AIOParam2Contact(AIOParam);
             long msgID = (long) Reflex.invokeVirtual(msg, "getMsgId");
-            ArrayList<Contact> c = new ArrayList<>();
+            ArrayList<ContactCompat> c = new ArrayList<>();
             c.add(contact);
 
             ArrayList<Long> l = new ArrayList<>();
             l.add(msgID);
 
-            IKernelMsgService service = MsgServiceHelper.getKernelMsgService(AppRuntimeHelper.getAppRuntime());
+            KernelMsgServiceCompat service = MsgServiceHelper.getKernelMsgService(AppRuntimeHelper.getAppRuntime());
             HashMap<Integer, MsgAttributeInfo> attrMap = new HashMap<>();
             Method builder = DexKit.loadMethodFromCache(VasAttrBuilder.INSTANCE);
             if (builder != null) {
                 Object builderInstance = builder.getDeclaringClass().newInstance();
-                builder.invoke(builderInstance, attrMap, contact, 4);
+                builder.invoke(builderInstance, attrMap, contact.toKernelObject(), 4);
             }
 
             service.getMsgsByMsgId(contact, l, (i, str, list) -> {
@@ -455,4 +399,44 @@ public class RepeaterPlus extends BaseFunctionHook implements SessionHooker.IAIO
         }
     }
 
+    @NonNull
+    @Override
+    public String[] getTargetComponentTypes() {
+        return new String[]{
+                "com.tencent.mobileqq.aio.msglist.holder.component.text.AIOTextContentComponent",
+                "com.tencent.mobileqq.aio.msglist.holder.component.pic.AIOPicContentComponent",
+                "com.tencent.mobileqq.aio.msglist.holder.component.reply.AIOReplyComponent",
+                "com.tencent.mobileqq.aio.msglist.holder.component.anisticker.AIOAniStickerContentComponent",
+                "com.tencent.mobileqq.aio.msglist.holder.component.video.AIOVideoContentComponent",
+                "com.tencent.mobileqq.aio.msglist.holder.component.multifoward.AIOMultifowardContentComponent",
+                "com.tencent.mobileqq.aio.msglist.holder.component.longmsg.AIOLongMsgContentComponent",
+                "com.tencent.mobileqq.aio.msglist.holder.component.mix.AIOMixContentComponent",
+                "com.tencent.mobileqq.aio.msglist.holder.component.ark.AIOArkContentComponent",
+                "com.tencent.mobileqq.aio.msglist.holder.component.file.AIOFileContentComponent",
+                "com.tencent.mobileqq.aio.msglist.holder.component.LocationShare.AIOLocationShareComponent"
+        };
+    }
+
+    @Override
+    public void onGetMenuNt(@NonNull Object msg, @NonNull String componentType, @NonNull XC_MethodHook.MethodHookParam param) throws Exception {
+        if (!isEnabled() || !RepeaterPlusIconSettingDialog.getIsShowInMenu()) {
+            return;
+        }
+        if (ContextUtils.getCurrentActivity().getClass().getName().contains("MultiForwardActivity")) {
+            return;
+        }
+        Object item = CustomMenu.createItemIconNt(msg, "+1", R.drawable.ic_item_repeat_72dp, R.id.item_repeat, () -> {
+            if (isMessageRepeatable(msg)) {
+                repeatByForwardNt(msg);
+            } else {
+                Toasts.error(ContextUtils.getCurrentActivity(), "该消息不支持复读");
+            }
+            return Unit.INSTANCE;
+        });
+        List list = (List) param.getResult();
+        List result = new ArrayList<>();
+        result.add(0, item);
+        result.addAll(list);
+        param.setResult(result);
+    }
 }

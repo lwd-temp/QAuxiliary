@@ -38,9 +38,6 @@ import cc.ioctl.fragment.RevokeMsgConfigFragment;
 import cc.ioctl.util.HookUtils;
 import cc.ioctl.util.HostInfo;
 import cc.ioctl.util.Reflex;
-import com.tencent.qqnt.kernel.nativeinterface.Contact;
-import com.tencent.qqnt.kernel.nativeinterface.IKernelMsgService;
-import com.tencent.qqnt.kernel.nativeinterface.JsonGrayElement;
 import com.tencent.qqnt.kernel.nativeinterface.MsgRecord;
 import io.github.qauxv.activity.SettingsUiFragmentHostActivity;
 import io.github.qauxv.base.IUiItemAgent;
@@ -50,6 +47,8 @@ import io.github.qauxv.bridge.AppRuntimeHelper;
 import io.github.qauxv.bridge.ContactUtils;
 import io.github.qauxv.bridge.QQMessageFacade;
 import io.github.qauxv.bridge.RevokeMsgInfoImpl;
+import io.github.qauxv.bridge.kernelcompat.ContactCompat;
+import io.github.qauxv.bridge.kernelcompat.KernelMsgServiceCompat;
 import io.github.qauxv.bridge.ntapi.ChatTypeConstants;
 import io.github.qauxv.bridge.ntapi.MsgServiceHelper;
 import io.github.qauxv.bridge.ntapi.NtGrayTipHelper;
@@ -432,9 +431,9 @@ public class RevokeMsgHook extends CommonConfigFunctionHook {
         if (chatType == 2 && !Objects.equals(peerUid, toUid)) {
             Log.w("!!! onRecallSysMsgForNT potential bug: chatType=" + chatType + ", peerUid=" + peerUid + ", toUid=" + toUid + ", selfUid=" + selfUid);
         }
-        Contact contact = new Contact(chatType, peerUid, "");
+        ContactCompat contact = new ContactCompat(chatType, peerUid, "");
         AppRuntime app = AppRuntimeHelper.getAppRuntime();
-        IKernelMsgService kmsgSvc = MsgServiceHelper.getKernelMsgService(app);
+        KernelMsgServiceCompat kmsgSvc = MsgServiceHelper.getKernelMsgService(app);
         // I don't know why, but...
         // IKernelMsgService.getMsgsByMsgId callback: result=0, errMsg=null, msgList=[](empty list)
         // IKernelMsgService.getMsgsBySeqList does not invoke callback at all, and no log
@@ -529,7 +528,7 @@ public class RevokeMsgHook extends CommonConfigFunctionHook {
                 }
                 String jsonStr = builder.build().toString();
                 int busiId = (chatType == ChatTypeConstants.C2C) ? NtGrayTipHelper.AIO_AV_C2C_NOTICE : NtGrayTipHelper.AIO_AV_GROUP_NOTICE;
-                JsonGrayElement jsonGrayElement = NtGrayTipHelper.createLocalJsonElement(busiId, jsonStr, summary);
+                Object jsonGrayElement = NtGrayTipHelper.createLocalJsonElement(busiId, jsonStr, summary);
                 NtGrayTipHelper.addLocalJsonGrayTipMsg(AppRuntimeHelper.getAppRuntime(), contact, jsonGrayElement, true, true, (result, uin) -> {
                     if (result != 0) {
                         Log.e("onRecallSysMsgForNT error: addLocalJsonGrayTipMsg failed, result=" + result);
@@ -618,7 +617,43 @@ public class RevokeMsgHook extends CommonConfigFunctionHook {
         List<?> list = null;
         try {
             // message is query by shmsgseq, not by time ---> queryMessagesByShmsgseqFromDB
-            if (HostInfo.requireMinQQVersion(QQVersion.QQ_8_9_55)) {
+            // 定位方法名 ---> queryMsgItemByShmsgseq
+            if (HostInfo.requireMinQQVersion(QQVersion.QQ_9_0_60)) { // 9.0.60~9.0.68
+                list = (List<?>) Reflex.invokeVirtual(mQQMsgFacade, "t0",
+                        uin, istroop, shmsgseq, msgUid,
+                        String.class, int.class, long.class, long.class,
+                        List.class);
+            } else if (HostInfo.requireMinQQVersion(QQVersion.QQ_9_0_50)) { // 9.0.50
+                list = (List<?>) Reflex.invokeVirtual(mQQMsgFacade, "u2",
+                        uin, istroop, shmsgseq, msgUid,
+                        String.class, int.class, long.class, long.class,
+                        List.class);
+            } else if (HostInfo.requireMinQQVersion(QQVersion.QQ_9_0_25)) { // 9.0.25~9.0.35
+                list = (List<?>) Reflex.invokeVirtual(mQQMsgFacade, "u0",
+                        uin, istroop, shmsgseq, msgUid,
+                        String.class, int.class, long.class, long.class,
+                        List.class);
+            } else if (HostInfo.requireMinQQVersion(QQVersion.QQ_9_0_0)) { // 9.0.0~9.0.20
+                list = (List<?>) Reflex.invokeVirtual(mQQMsgFacade, "v0",
+                        uin, istroop, shmsgseq, msgUid,
+                        String.class, int.class, long.class, long.class,
+                        List.class);
+            } else if (HostInfo.requireMinQQVersion(QQVersion.QQ_8_9_88)) { // 8.9.88~8.9.93
+                list = (List<?>) Reflex.invokeVirtual(mQQMsgFacade, "w0",
+                        uin, istroop, shmsgseq, msgUid,
+                        String.class, int.class, long.class, long.class,
+                        List.class);
+            } else if (HostInfo.requireMinQQVersion(QQVersion.QQ_8_9_85)) { // 8.9.85
+                list = (List<?>) Reflex.invokeVirtual(mQQMsgFacade, "x0",
+                        uin, istroop, shmsgseq, msgUid,
+                        String.class, int.class, long.class, long.class,
+                        List.class);
+            } else if (HostInfo.requireMinQQVersion(QQVersion.QQ_8_9_70)) { // 8.9.70~8.9.76
+                list = (List<?>) Reflex.invokeVirtual(mQQMsgFacade, "y0",
+                        uin, istroop, shmsgseq, msgUid,
+                        String.class, int.class, long.class, long.class,
+                        List.class);
+            } else if (HostInfo.requireMinQQVersion(QQVersion.QQ_8_9_55)) {
                 list = (List<?>) Reflex.invokeVirtual(mQQMsgFacade, "J0",
                         uin, istroop, shmsgseq, msgUid,
                         String.class, int.class, long.class, long.class,

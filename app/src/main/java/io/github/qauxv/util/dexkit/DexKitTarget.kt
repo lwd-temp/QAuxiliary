@@ -24,7 +24,6 @@ package io.github.qauxv.util.dexkit
 
 import android.os.Bundle
 import android.view.View
-import android.widget.TextView
 import cc.ioctl.util.HostInfo
 import com.github.kyuubiran.ezxhelper.utils.isAbstract
 import com.github.kyuubiran.ezxhelper.utils.isFinal
@@ -618,22 +617,14 @@ data object NScene_checkDataRecmdRemarkList : DexKitTarget.UsingStr() {
     override val findMethod: Boolean = true
     override val declaringClass = "com.tencent.mobileqq.troopAddFrd.Scene"
     override val traitString = arrayOf("checkDataRecmdRemarkList cacheInvalid_ts_type_troopUin=%b_%d_%d_%s")
-    override val filter = DexKitFilter.strInClsName("com/tencent/mobileqq/troopAddFrd") or DexKitFilter.defpackage
+    override val filter = DexKitFilter.strInClsName("com/tencent/mobileqq/") or DexKitFilter.defpackage
 }
 
 data object NCustomWidgetUtil_updateCustomNoteTxt : DexKitTarget.UsingStr() {
     // guess
-    override val findMethod: Boolean = true
     override val declaringClass = "com.tencent.widget.CustomWidgetUtil"
     override val traitString = arrayOf("^NEW$")
-    override val filter = DexKitFilter.strInClsName("com/tencent/widget") or
-        DexKitFilter.defpackage and
-        DexKitFilter.notHasSuper and
-        filter@{ it: DexMethodDescriptor ->
-            val m = kotlin.runCatching { it.getMethodInstance(getHostClassLoader()) }.getOrNull() ?: return@filter false
-            m.isStatic && m.returnType == Void.TYPE
-                && m.parameterTypes[0] == TextView::class.java && m.paramCount == 6
-        }
+    override val filter = DexKitFilter.strInClsName("com/tencent/widget") or DexKitFilter.defpackage and DexKitFilter.notHasSuper
 }
 
 data object CCustomWidgetUtil_updateCustomNoteTxt_NT : DexKitTarget.UsingStr() {
@@ -888,9 +879,16 @@ data object FormItem_TIM : DexKitTarget.UsingStringVector() {
     override val filter: dexkitFilter = DexKitFilter.allowAll
 }
 
-data object QQSettingMeABTestHelper_isZPlanExpGroup : DexKitTarget.UsingStringVector() {
+data object QQSettingMeABTestHelper_isZPlanExpGroup_New : DexKitTarget.UsingStringVector() {
     override val findMethod: Boolean = true
     override val traitStringVectors: Array<Array<String>> = arrayOf(arrayOf("isZPlanExpGroup: ", "QQSettingMeABTestHelper"))
+    override val declaringClass: String = ""
+    override val filter: dexkitFilter = DexKitFilter.allowAll
+}
+
+data object QQSettingMeABTestHelper_isZplanExpGroup_Old : DexKitTarget.UsingStringVector() {
+    override val findMethod: Boolean = true
+    override val traitStringVectors: Array<Array<String>> = arrayOf(arrayOf("isZplanExpGroup: ", "QQSettingMeABTestHelper"))
     override val declaringClass: String = ""
     override val filter: dexkitFilter = DexKitFilter.allowAll
 }
@@ -940,8 +938,60 @@ data object RecentPopup_onClickAction : DexKitTarget.UsingStr() {
 }
 
 data object TroopInfoCardPageABConfig : DexKitTarget.UsingStr() {
-    override val findMethod: Boolean = true
-    override val traitString: Array<String> = arrayOf("exp_qq_grp_idcard_switch_v2")
+    override val findMethod: Boolean = false
+    override val traitString: Array<String> = arrayOf("enableNewPageFromTroopSettingSwitch=")
     override val declaringClass = ""
     override val filter: dexkitFilter = DexKitFilter.allowAll
+}
+
+data object PlusPanel_PanelAdapter : DexKitTarget.UsingStr() {
+    override val findMethod: Boolean = false
+    override val traitString: Array<String> = arrayOf("appDataLists.subList(startIndex, endIndex)")
+    override val declaringClass = ""
+    override val filter: dexkitFilter = DexKitFilter.allowAll
+}
+
+data object Hd_FakePhone_Method : DexKitTarget.UsingStringVector() {
+    override val findMethod = true
+    override val traitStringVectors = arrayOf(arrayOf("status", "wording", "target_desc", "target_name"))
+    override val declaringClass = ""
+    override val filter = DexKitFilter.strInClsName("com/tencent/mobileqq/app/")
+}
+
+data object Hd_RemoveRedPackSkin_Class : DexKitTarget.UsingStr() {
+    override val findMethod = false
+    override val traitString = arrayOf("红包封皮")
+    override val declaringClass = ""
+    override val filter = DexKitFilter.strInClsName("com/tencent/mobileqq/qwallet/hb/panel/")
+}
+
+data object Hd_HandleQQSomeFunExit_fixFileView_Method : DexKitTarget.UsingStr() {
+    override val findMethod = true
+    override val traitString = arrayOf("(fileElement.fileSize)")
+    override val declaringClass = "Lcom/tencent/mobileqq/aio/msglist/holder/component/file/AIOFileViewer"
+    override val filter = DexKitFilter.allowAll
+}
+
+data object Hd_AutoSendOriginalPhoto_guildPicker_Method : DexKitTarget.UsingStr() {
+    override val findMethod = true
+    override val traitString = arrayOf("isRaw")
+    override val declaringClass = "Lcom/tencent/qqnt/qbasealbum/album/view/PickerBottomBarPart"
+    override val filter = DexKitFilter.strInClsName("com/tencent/qqnt/qbasealbum/album/view/")
+}
+
+data object Hd_AutoSendOriginalPhoto_photoListPanel_Method : DexKitTarget.UsingStr() {
+    override val findMethod = true
+    override val traitString = arrayOf("resetStatus selectSize:")
+    override val declaringClass = "Lcom/tencent/mobileqq/activity/aio/photo/PhotoListPanel"
+    override val filter = DexKitFilter.allowAll
+}
+
+data object Hd_DisableGrowHalfLayer_Method : DexKitTarget.UsingStringVector() {
+    override val findMethod = true
+    override val traitStringVectors = arrayOf(arrayOf("grow_half_layer_info", "grow_half_layer_tech_info"))
+    override val declaringClass = "cooperation.vip.ad.GrowHalfLayerHelper"
+    override val filter = DexKitFilter.strInClsName("cooperation/vip/ad/") and filter@{ it: DexMethodDescriptor ->
+        val m = kotlin.runCatching { it.getMethodInstance(getHostClassLoader()) }.getOrNull() ?: return@filter false
+        m.returnType == Void.TYPE && m.paramCount == 3
+    }
 }
